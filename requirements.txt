@@ -2,4 +2,3 @@ flask
 edge-tts
 gTTS
 gunicorn
-nest_asyncio
