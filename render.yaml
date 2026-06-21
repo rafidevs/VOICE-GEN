@@ -3,7 +3,7 @@ services:
     name: voicegen
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --threads 4 --timeout 120
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120 --worker-class gthread
     plan: free
     envVars:
       - key: PYTHON_VERSION
