@@ -12,7 +12,7 @@ app = Flask(__name__, static_folder='static')
 AUDIO_DIR = os.path.join(tempfile.gettempdir(), 'voicegen_audio')
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
-GENERATION_TIMEOUT = 25
+GENERATION_TIMEOUT = 120
 
 VOICES = [
     {"id": "bn-BD-NabanitaNeural", "name": "Nabanita", "desc": "মিষ্টি ও স্বাভাবিক", "accent": "বাংলাদেশ নেটিভ", "emoji": "🌺", "rate": "+0%", "pitch": "+0Hz", "engine": "edge", "tier": "native"},
