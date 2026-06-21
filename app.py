@@ -5,15 +5,14 @@ import uuid
 import asyncio
 import time
 import tempfile
-import nest_asyncio
 from gtts import gTTS
-
-nest_asyncio.apply()
 
 app = Flask(__name__, static_folder='static')
 
 AUDIO_DIR = os.path.join(tempfile.gettempdir(), 'voicegen_audio')
 os.makedirs(AUDIO_DIR, exist_ok=True)
+
+GENERATION_TIMEOUT = 25
 
 VOICES = [
     {"id": "bn-BD-NabanitaNeural", "name": "Nabanita", "desc": "মিষ্টি ও স্বাভাবিক", "accent": "বাংলাদেশ নেটিভ", "emoji": "🌺", "rate": "+0%", "pitch": "+0Hz", "engine": "edge", "tier": "native"},
@@ -65,8 +64,16 @@ async def generate_edge(text, voice_id, rate, pitch):
     filename = f"{uuid.uuid4().hex}.mp3"
     filepath = os.path.join(AUDIO_DIR, filename)
     communicate = edge_tts.Communicate(text, voice_id, rate=rate, pitch=pitch)
-    await communicate.save(filepath)
+    await asyncio.wait_for(communicate.save(filepath), timeout=GENERATION_TIMEOUT)
     return filename
+
+
+def run_async(coro):
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
 
 
 def generate_gtts(text, lang, slow):
@@ -109,7 +116,7 @@ def generate():
                 base_rate = int(rate.replace('%', '').replace('+', '')) if rate != "+0%" else 0
                 new_rate = base_rate + custom_speed
                 rate = f"{'+' if new_rate >= 0 else ''}{new_rate}%"
-            filename = asyncio.run(generate_edge(text, voice_info["id"], rate, pitch))
+            filename = run_async(generate_edge(text, voice_info["id"], rate, pitch))
 
         return jsonify({
             "success": True,
@@ -118,6 +125,8 @@ def generate():
             "voice_name": voice_info["name"],
             "text_length": len(text)
         })
+    except asyncio.TimeoutError:
+        return jsonify({"error": "Voice generation timed out. Try shorter text or a different voice."}), 504
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
