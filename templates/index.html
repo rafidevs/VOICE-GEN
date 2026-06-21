@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoiceGen — বাংলা ভয়েস জেনারেটর</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="bg-animation">
+        <div class="orb orb-1"></div>
+        <div class="orb orb-2"></div>
+        <div class="orb orb-3"></div>
+    </div>
+
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <i class="fas fa-waveform-lines"></i>
+                <span class="logo-text">VoiceGen</span>
+            </div>
+            <p class="subtitle">বাংলা টেক্সট থেকে সুন্দর মেয়েদের ভয়েস তৈরি করুন</p>
+        </header>
+
+        <main class="main-content">
+            <section class="input-section">
+                <div class="section-label">
+                    <i class="fas fa-pen-fancy"></i>
+                    <span>টেক্সট ইনপুট</span>
+                </div>
+                <div class="input-method-tabs">
+                    <button class="tab-btn active" data-tab="paste">
+                        <i class="fas fa-paste"></i> পেস্ট
+                    </button>
+                    <button class="tab-btn" data-tab="file">
+                        <i class="fas fa-file-upload"></i> ফাইল
+                    </button>
+                </div>
+                <div class="tab-content paste-tab active">
+                    <textarea id="textInput" placeholder="বাংলা টেক্সট লিখুন বা পেস্ট করুন..." rows="6"></textarea>
+                    <div class="char-count"><span id="charCount">0</span> / 25000</div>
+                </div>
+                <div class="tab-content file-tab">
+                    <div class="file-upload-zone" id="fileZone">
+                        <i class="fas fa-cloud-arrow-up"></i>
+                        <p>ড্র্গ অ্যান্ড ড্রপ বা ক্লিক</p>
+                        <span class="file-types">.txt, .md ফাইল</span>
+                        <input type="file" id="fileInput" accept=".txt,.md" hidden>
+                    </div>
+                    <div class="file-info" id="fileInfo" style="display:none">
+                        <i class="fas fa-file-lines"></i>
+                        <span id="fileName"></span>
+                        <button id="removeFile" class="remove-btn"><i class="fas fa-xmark"></i></button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="voice-section">
+                <div class="section-label">
+                    <i class="fas fa-microphone-lines"></i>
+                    <span>ভয়েস নির্বাচন — নামে ক্লিক করে দেখুন</span>
+                </div>
+
+                <div class="voice-tier-label">
+                    <span class="tier-badge tier-native">★ নেটিভ বাংলা — সবচেয়ে রিয়েল</span>
+                </div>
+                <div class="voice-row">
+                    {% for voice in voices if voice.tier == 'native' %}
+                    <button class="voice-pill voice-pill-native" data-voice-name="{{ voice.name }}" data-voice-id="{{ voice.id }}" data-desc="{{ voice.desc }}" data-accent="{{ voice.accent }}">
+                        {{ voice.emoji }} {{ voice.name }}
+                    </button>
+                    {% endfor %}
+                </div>
+
+                <div class="voice-tier-label">
+                    <span class="tier-badge tier-multi">◆ মাল্টিলিঙ্গুয়াল</span>
+                </div>
+                <div class="voice-row">
+                    {% for voice in voices if voice.tier == 'multi' %}
+                    <button class="voice-pill voice-pill-multi" data-voice-name="{{ voice.name }}" data-voice-id="{{ voice.id }}" data-desc="{{ voice.desc }}" data-accent="{{ voice.accent }}">
+                        {{ voice.emoji }} {{ voice.name }}
+                    </button>
+                    {% endfor %}
+                </div>
+
+                <div class="voice-tier-label">
+                    <span class="tier-badge tier-asia">● এশিয়ান</span>
+                </div>
+                <div class="voice-row">
+                    {% for voice in voices if voice.tier == 'asia' %}
+                    <button class="voice-pill voice-pill-asia" data-voice-name="{{ voice.name }}" data-voice-id="{{ voice.id }}" data-desc="{{ voice.desc }}" data-accent="{{ voice.accent }}">
+                        {{ voice.emoji }} {{ voice.name }}
+                    </button>
+                    {% endfor %}
+                </div>
+
+                <div class="voice-tier-label">
+                    <span class="tier-badge tier-google">⬤ Google TTS</span>
+                </div>
+                <div class="voice-row">
+                    {% for voice in voices if voice.tier == 'google' %}
+                    <button class="voice-pill voice-pill-google" data-voice-name="{{ voice.name }}" data-voice-id="{{ voice.id }}" data-desc="{{ voice.desc }}" data-accent="{{ voice.accent }}">
+                        {{ voice.emoji }} {{ voice.name }}
+                    </button>
+                    {% endfor %}
+                </div>
+
+                <div class="voice-detail-card" id="voiceDetail" style="display:none">
+                    <div class="voice-detail-emoji" id="detailEmoji"></div>
+                    <div class="voice-detail-info">
+                        <div class="voice-detail-name" id="detailName"></div>
+                        <div class="voice-detail-desc" id="detailDesc"></div>
+                        <div class="voice-detail-accent" id="detailAccent"></div>
+                    </div>
+                    <button class="voice-detail-close" id="detailClose"><i class="fas fa-xmark"></i></button>
+                </div>
+            </section>
+
+            <section class="speed-section">
+                <div class="section-label">
+                    <i class="fas fa-gauge-high"></i>
+                    <span>স্পিড কন্ট্রোল</span>
+                </div>
+                <div class="speed-control">
+                    <span class="speed-label-slow">ধীর</span>
+                    <input type="range" id="speedSlider" min="-50" max="50" value="0" step="5" class="speed-slider">
+                    <span class="speed-label-fast">দ্রুত</span>
+                    <div class="speed-value" id="speedValue">স্বাভাবিক</div>
+                </div>
+            </section>
+
+            <button id="generateBtn" class="generate-btn">
+                <span class="btn-content">
+                    <i class="fas fa-sparkles"></i>
+                    <span>ভয়েস জেনারেট করুন</span>
+                </span>
+                <span class="btn-loading" style="display:none">
+                    <div class="spinner"></div>
+                    <span>তৈরি হচ্ছে...</span>
+                </span>
+            </button>
+
+            <section class="result-section" id="resultSection" style="display:none">
+                <div class="result-card">
+                    <div class="result-header">
+                        <div class="result-info">
+                            <div class="result-voice-badge" id="resultVoiceBadge">
+                                <i class="fas fa-user-audio"></i>
+                                <span id="resultVoiceName"></span>
+                            </div>
+                            <div class="result-meta">
+                                <span id="resultChars"></span> অক্ষর
+                            </div>
+                        </div>
+                        <div class="result-actions">
+                            <button id="downloadBtn" class="action-btn download-btn">
+                                <i class="fas fa-download"></i> ডাউনলোড MP3
+                            </button>
+                            <button id="regenerateBtn" class="action-btn regen-btn">
+                                <i class="fas fa-rotate"></i> আবার
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="player-container">
+                        <div class="player-waveform" id="waveform">
+                            <canvas id="waveCanvas"></canvas>
+                        </div>
+                        <div class="player-controls">
+                            <button id="playBtn" class="play-btn">
+                                <i class="fas fa-play"></i>
+                            </button>
+                            <div class="progress-container">
+                                <div class="progress-bar" id="progressBar">
+                                    <div class="progress-fill" id="progressFill"></div>
+                                    <div class="progress-handle" id="progressHandle"></div>
+                                </div>
+                                <div class="time-display">
+                                    <span id="currentTime">0:00</span>
+                                    <span id="totalTime">0:00</span>
+                                </div>
+                            </div>
+                            <div class="volume-control">
+                                <button id="volumeBtn" class="volume-btn">
+                                    <i class="fas fa-volume-high"></i>
+                                </button>
+                                <input type="range" id="volumeSlider" min="0" max="100" value="80" class="volume-slider">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <p>Made with <i class="fas fa-heart" style="color:#ff6b9d"></i> | Edge TTS + Google TTS</p>
+        </footer>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
