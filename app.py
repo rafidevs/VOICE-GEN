@@ -12,7 +12,10 @@ app = Flask(__name__, static_folder='static')
 AUDIO_DIR = os.path.join(tempfile.gettempdir(), 'voicegen_audio')
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
-GENERATION_TIMEOUT = 60
+GENERATION_TIMEOUT = int(os.environ.get('GENERATION_TIMEOUT', 600))
+MAX_TEXT_LENGTH = 100000
+EDGE_CHUNK_SIZE = 1800
+GTTS_CHUNK_SIZE = 1200
 
 VOICES = [
     {"id": "bn-BD-NabanitaNeural", "name": "Nabanita", "desc": "মিষ্টি ও স্বাভাবিক", "accent": "বাংলাদেশ নেটিভ", "emoji": "🌺", "rate": "+0%", "pitch": "+0Hz", "engine": "edge", "tier": "native"},
@@ -60,11 +63,87 @@ def cleanup_old_files():
                 pass
 
 
+def split_long_text(text, max_chars):
+    chunks = []
+    remaining = text.strip()
+    soft_breaks = ["।", ".", "?", "!", ",", ";", " "]
+
+    while len(remaining) > max_chars:
+        split_at = -1
+        window = remaining[:max_chars]
+        for marker in soft_breaks:
+            pos = window.rfind(marker)
+            if pos > max_chars * 0.55:
+                split_at = pos + len(marker)
+                break
+        if split_at <= 0:
+            split_at = max_chars
+
+        chunk = remaining[:split_at].strip()
+        if chunk:
+            chunks.append(chunk)
+        remaining = remaining[split_at:].strip()
+
+    if remaining:
+        chunks.append(remaining)
+    return chunks
+
+
+def split_text(text, max_chars):
+    chunks = []
+    current = ""
+    normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+
+    for paragraph in normalized.splitlines():
+        paragraph = paragraph.strip()
+        if not paragraph:
+            continue
+        sentences = paragraph.replace("।", "।\n").replace(".", ".\n").replace("?", "?\n").replace("!", "!\n").splitlines()
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+            for piece in split_long_text(sentence, max_chars):
+                next_text = f"{current} {piece}".strip()
+                if len(next_text) <= max_chars:
+                    current = next_text
+                else:
+                    if current:
+                        chunks.append(current)
+                    current = piece
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def generation_timeout_message():
+    return f"Voice generation timed out after {GENERATION_TIMEOUT} seconds. Try a shorter text or increase GENERATION_TIMEOUT."
+
+
+def user_friendly_error(error):
+    message = str(error)
+    lower_message = message.lower()
+    if "content" in lower_message and "filter" in lower_message:
+        return "TTS service blocked this text. Try changing a few words or generate in smaller parts."
+    if "no audio" in lower_message or "failed to connect" in lower_message or "timed out" in lower_message:
+        return "Voice service did not respond correctly. Try again, or generate smaller parts."
+    return message
+
+
 async def generate_edge(text, voice_id, rate, pitch):
     filename = f"{uuid.uuid4().hex}.mp3"
     filepath = os.path.join(AUDIO_DIR, filename)
-    communicate = edge_tts.Communicate(text, voice_id, rate=rate, pitch=pitch)
-    await asyncio.wait_for(communicate.save(filepath), timeout=GENERATION_TIMEOUT)
+    chunks = split_text(text, EDGE_CHUNK_SIZE)
+
+    async def write_audio():
+        with open(filepath, 'wb') as audio_file:
+            for chunk_text in chunks:
+                communicate = edge_tts.Communicate(chunk_text, voice_id, rate=rate, pitch=pitch)
+                async for chunk in communicate.stream():
+                    if chunk["type"] == "audio":
+                        audio_file.write(chunk["data"])
+
+    await asyncio.wait_for(write_audio(), timeout=GENERATION_TIMEOUT)
     return filename
 
 
@@ -79,8 +158,18 @@ def run_async(coro):
 def generate_gtts(text, lang, slow):
     filename = f"{uuid.uuid4().hex}.mp3"
     filepath = os.path.join(AUDIO_DIR, filename)
-    tts = gTTS(text=text, lang=lang, slow=slow)
-    tts.save(filepath)
+    chunks = split_text(text, GTTS_CHUNK_SIZE)
+    with open(filepath, 'wb') as audio_file:
+        for chunk_text in chunks:
+            chunk_path = os.path.join(AUDIO_DIR, f"{uuid.uuid4().hex}.mp3")
+            try:
+                tts = gTTS(text=chunk_text, lang=lang, slow=slow)
+                tts.save(chunk_path)
+                with open(chunk_path, 'rb') as chunk_file:
+                    audio_file.write(chunk_file.read())
+            finally:
+                if os.path.exists(chunk_path):
+                    os.remove(chunk_path)
     return filename
 
 
@@ -99,8 +188,8 @@ def generate():
     if not text:
         return jsonify({"error": "Please enter some text"}), 400
 
-    if len(text) > 25000:
-        return jsonify({"error": "Text is too long (max 25000 characters)"}), 400
+    if len(text) > MAX_TEXT_LENGTH:
+        return jsonify({"error": f"Text is too long (max {MAX_TEXT_LENGTH} characters)"}), 400
 
     cleanup_old_files()
 
@@ -126,9 +215,9 @@ def generate():
             "text_length": len(text)
         })
     except asyncio.TimeoutError:
-        return jsonify({"error": "Voice generation timed out. Try shorter text or a different voice."}), 504
+        return jsonify({"error": generation_timeout_message()}), 504
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": user_friendly_error(e)}), 500
 
 
 @app.route('/audio/<filename>')
