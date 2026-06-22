@@ -1,5 +1,6 @@
 class VoiceGenApp {
     constructor() {
+        this.maxTextLength = 100000;
         this.selectedVoiceName = 'Nabanita';
         this.audioElement = null;
         this.currentFile = null;
@@ -109,8 +110,8 @@ class VoiceGenApp {
         el.textContent = count;
         const container = el.parentElement;
         container.classList.remove('warning', 'error');
-        if (count > 20000) container.classList.add('warning');
-        if (count > 25000) container.classList.add('error');
+        if (count > this.maxTextLength * 0.8) container.classList.add('warning');
+        if (count > this.maxTextLength) container.classList.add('error');
     }
 
     setupGenerate() {
@@ -120,6 +121,7 @@ class VoiceGenApp {
     async generate() {
         const text = document.getElementById('textInput').value.trim();
         if (!text) { this.showToast('টেক্সট লিখুন', 'error'); return; }
+        if (text.length > this.maxTextLength) { this.showToast(`সর্বোচ্চ ${this.maxTextLength} অক্ষর দিন`, 'error'); return; }
 
         const speed = parseInt(document.getElementById('speedSlider').value);
         const btn = document.getElementById('generateBtn');
@@ -134,7 +136,13 @@ class VoiceGenApp {
                 body: JSON.stringify({ text, voice_name: this.selectedVoiceName, speed })
             });
             const data = await res.json();
-            if (data.error) { this.showToast(data.error, 'error'); return; }
+            if (data.error) {
+                const msg = data.error.includes('timed out')
+                    ? 'ভয়েস বানাতে অনেক সময় লাগছে। টেক্সট ছোট ভাগে দিন অথবা timeout বাড়ান।'
+                    : data.error;
+                this.showToast(msg, 'error');
+                return;
+            }
             this.showResult(data);
             this.showToast('ভয়েস তৈরি হয়েছে!', 'success');
         } catch (err) {
